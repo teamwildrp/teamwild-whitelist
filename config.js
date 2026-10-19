@@ -6,7 +6,7 @@ window.TW_CONFIG = {
 
     // URL del Worker de Cloudflare (worker.js), que reenvia al webhook de Discord.
     // El webhook NUNCA va aqui: este archivo es publico.
-    endpoint: '',
+    endpoint: 'https://teamwild-whitelist.scratch-2026-10-19-acfc9a.workers.dev',
 
     // IDs de los roles a mencionar en cada solicitud (clic derecho en el rol > Copiar ID).
     // Deben coincidir con PING_ROLES del Worker, que es quien decide cuales suenan.
