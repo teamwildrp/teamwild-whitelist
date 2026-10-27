@@ -31,8 +31,9 @@
      PAGE_URL          Direccion del formulario, a donde se vuelve tras iniciar sesion
    En OAuth2 > Redirects de la aplicacion: https://<este worker>/callback
 
-   El cooldown se comprueba leyendo las solicitudes que ya hay en el canal, asi
-   cuenta tambien las enviadas antes de existir y borrar un mensaje lo levanta. */
+   El cooldown se comprueba en el KV SUBMITS (cada envio guarda su ID y su email
+   durante COOLDOWN_HOURS, aunque luego se borre el mensaje) y ademas leyendo las
+   solicitudes que ya hay en el canal, que cubre las enviadas antes del KV. */
 
 const MAX_FILES = 2;
 const MAX_BYTES = 9 * 1024 * 1024;
@@ -70,11 +71,28 @@ function discord(env, path, init = {}) {
     return fetch(API + path, { ...init, headers });
 }
 
+const cooldownKeys = (id, email) => [id && 'id:' + id, email && 'email:' + email].filter(Boolean);
+
+// Guarda el envio para que el cooldown no dependa de que el mensaje siga en Discord
+async function rememberSubmit(env, id, email) {
+    const hours = Number(env.COOLDOWN_HOURS || 12);
+    if (!env.SUBMITS || !hours) return;
+    const now = new Date().toISOString();
+    await Promise.all(cooldownKeys(id, email).map(k => env.SUBMITS.put(k, now, { expirationTtl: Math.max(60, hours * 3600) })));
+}
+
 // Fecha hasta la que dura el cooldown de esta persona, o null si puede enviar
 async function cooldownUntil(env, id, email) {
     const hours = Number(env.COOLDOWN_HOURS || 12);
+    if (!hours) return null;
+
+    if (env.SUBMITS) {
+        const sent = (await Promise.all(cooldownKeys(id, email).map(k => env.SUBMITS.get(k)))).filter(Boolean).sort().pop();
+        if (sent && Date.parse(sent) + hours * 3600e3 > Date.now()) return new Date(Date.parse(sent) + hours * 3600e3).toISOString();
+    }
+
     const token = env.WL_BOT_TOKEN || env.BOT_TOKEN;
-    if (!token || !hours) return null;
+    if (!token) return null;
     const auth = { headers: { Authorization: 'Bot ' + token } };
 
     if (!channelId) channelId = env.CHANNEL_ID || null;
@@ -431,6 +449,7 @@ export default {
             }
             res = await fetch(env.WEBHOOK_URL, { method: 'POST', body: retry });
         }
+        if (res.ok) ctx.waitUntil(rememberSubmit(env, userId, field(payload, 'Email')).catch(e => console.error('remember', e.message)));
         return reply(res.ok ? 204 : res.status);
     },
 };

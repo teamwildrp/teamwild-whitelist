@@ -19,5 +19,10 @@ PAGE_URL = "https://teamwildrp.github.io/teamwild-whitelist/"
 WL_PUBLIC_KEY = "22a0496c2e7b858fce0629ce2154a746169864087fcdfe44cc9fa9065797a526"
 # WEBHOOK_URL, BOT_TOKEN, WL_BOT_TOKEN, CLIENT_SECRET y SESSION_SECRET van como secretos: npx wrangler secret put WEBHOOK_URL
 
+# Registro de envios para el cooldown
+[[kv_namespaces]]
+binding = "SUBMITS"
+id = "07d4935e0fad4cf2ae1aad03918a5ffe"
+
 [observability]
 enabled = true
