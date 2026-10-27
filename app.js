@@ -5,6 +5,7 @@
 
     var CFG = window.TW_CONFIG || {};
     var DRAFT_KEY = 'tw-whitelist-draft';
+    var SESSION_KEY = 'tw-whitelist-session';
 
     // `ok` es el indice de la respuesta correcta; solo se usa para la nota que llega a Discord
     var QUIZ = {
@@ -226,6 +227,72 @@
     }
     function clearDraft() { try { localStorage.removeItem(DRAFT_KEY); } catch (e) { } }
 
+    // ------------------------------------------------------------ Sesion de Discord
+
+    // La sesion la firma el Worker; aqui solo se leen los datos para mostrarlos
+    var session = null;
+    var sessionToken = '';
+
+    function decodeSession(token) {
+        try {
+            var b = token.split('.')[0].replace(/-/g, '+').replace(/_/g, '/');
+            var data = JSON.parse(decodeURIComponent(escape(atob(b))));
+            return data.exp > Date.now() ? data : null;
+        } catch (e) { return null; }
+    }
+    function saveSession(token) {
+        try { if (token) localStorage.setItem(SESSION_KEY, token); else localStorage.removeItem(SESSION_KEY); } catch (e) { }
+    }
+    function startLogin() {
+        saveDraft();
+        location.href = CFG.endpoint.replace(/\/$/, '') + '/login';
+    }
+
+    function showGate(error) {
+        document.getElementById('login-gate').classList.remove('hidden');
+        document.getElementById('steps').classList.add('hidden');
+        form.classList.add('hidden');
+        document.getElementById('login-error').textContent = error || '';
+    }
+
+    function applySession() {
+        document.getElementById('login-gate').classList.add('hidden');
+        document.getElementById('steps').classList.remove('hidden');
+        form.classList.remove('hidden');
+        form.elements.discord_id.value = session.id;
+        form.elements.discord_user.value = session.username;
+        if (session.email && !val('email')) form.elements.email.value = session.email;
+        document.getElementById('discord-fields').classList.add('hidden');
+        document.getElementById('account').classList.remove('hidden');
+        document.getElementById('acc-avatar').src = session.avatar || 'https://cdn.discordapp.com/embed/avatars/0.png';
+        document.getElementById('acc-name').textContent = session.name || session.username;
+        document.getElementById('acc-user').textContent = '@' + session.username + ' · ' + session.id;
+    }
+
+    var LOGIN_ERRORS = {
+        cancel: 'Cancelaste el inicio de sesión. Lo necesitamos para continuar.',
+        state: 'El inicio de sesión caducó. Inténtalo de nuevo.',
+        discord: 'Discord no respondió. Inténtalo de nuevo en un momento.',
+        expired: 'Tu sesión con Discord caducó. Vuelve a iniciar sesión: tus respuestas se guardaron.',
+    };
+
+    function initLogin() {
+        if (!CFG.discordLogin || !CFG.endpoint) return;
+        var hash = new URLSearchParams(location.hash.slice(1));
+        var error = '';
+        if (hash.get('login')) saveSession(hash.get('login'));
+        if (hash.get('login_error')) error = LOGIN_ERRORS[hash.get('login_error')] || LOGIN_ERRORS.discord;
+        if (location.hash) history.replaceState(null, '', location.pathname + location.search);
+
+        try { sessionToken = localStorage.getItem(SESSION_KEY) || ''; } catch (e) { sessionToken = ''; }
+        session = sessionToken ? decodeSession(sessionToken) : null;
+        if (session) applySession();
+        else { saveSession(''); showGate(error || (sessionToken ? LOGIN_ERRORS.expired : '')); }
+    }
+
+    document.getElementById('btn-login').addEventListener('click', function (e) { e.preventDefault(); startLogin(); });
+    document.getElementById('btn-switch').addEventListener('click', function () { saveSession(''); startLogin(); });
+
     // ------------------------------------------------------------ Navegacion
 
     function go(i) {
@@ -350,6 +417,7 @@
 
         var fd = new FormData();
         fd.append('payload_json', JSON.stringify(payload));
+        if (session) fd.append('auth', sessionToken);
         fd.append('files[0]', new Blob([buildTranscript(results)], { type: 'text/plain;charset=utf-8' }), 'solicitud-' + safeUser + '.txt');
         if (storyFile) {
             var ext = (storyFile.name.match(/\.[a-z0-9]{1,5}$/i) || [''])[0];
@@ -363,6 +431,13 @@
         fetch(CFG.endpoint, { method: 'POST', body: fd })
             .then(function (res) {
                 if (res.ok) { clearDraft(); go(3); document.getElementById('nav').classList.add('hidden'); return; }
+                if (res.status === 401) {
+                    saveDraft();
+                    saveSession('');
+                    session = null;
+                    showGate(LOGIN_ERRORS.expired);
+                    return;
+                }
                 if (res.status === 409) return res.json().catch(function () { return {}; }).then(function (data) {
                     var until = data.until ? new Date(data.until) : null;
                     throw new Error('Ya hay una solicitud enviada con este ID de Discord o email. ' + (until
@@ -384,5 +459,6 @@
     }
 
     loadDraft();
+    initLogin();
     go(0);
 })();

@@ -235,6 +235,26 @@ input[type=number].input::-webkit-inner-spin-button { opacity: .4; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .btn.invisible { visibility: hidden; }
 
+/* ---------------------------------------------------------------- Inicio de sesion */
+
+.gate { text-align: center; margin-top: 16px; padding: 36px 20px 30px; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius); }
+.gate-icon {
+    width: 64px; height: 64px; margin: 0 auto 16px; border-radius: 50%;
+    display: grid; place-items: center; font-size: 28px;
+    background: rgba(88, 101, 242, .14); border: 2px solid #5865f2; color: #8b95ff;
+}
+.gate h2 { font-size: 20px; font-weight: 600; color: #ececec; }
+.gate p { color: var(--text-muted); max-width: 440px; margin: 8px auto 20px; font-size: 13.5px; }
+.gate .gate-error { color: var(--accent-red); margin: 14px auto 0; min-height: 1em; }
+.btn.discord { background: #5865f2; color: #fff; text-decoration: none; padding: 11px 22px; font-size: 14px; }
+.btn.discord:hover { background: #4752c4; }
+
+.account { display: flex; align-items: center; gap: 14px; }
+.acc-avatar { width: 46px; height: 46px; border-radius: 50%; background: #2c2c2c; flex: none; }
+.acc-text { flex: 1; min-width: 0; }
+.acc-text strong { display: block; color: #ececec; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.acc-text span { display: block; font-size: 12px; color: var(--text-muted); font-family: Consolas, monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 /* ---------------------------------------------------------------- Enviado */
 
 .done { text-align: center; padding: 36px 20px 24px; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius); }
@@ -263,4 +283,6 @@ input[type=number].input::-webkit-inner-spin-button { opacity: .4; }
     .card { padding: 14px; }
     .nav-status { display: none; }
     .nav .btn { flex: 1; }
+    .account { flex-wrap: wrap; }
+    .account .btn { width: 100%; }
 }

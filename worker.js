@@ -19,9 +19,17 @@
      REJECTED_CHANNEL  Canal donde se anuncian las rechazadas
      APPROVER_ROLES    Roles que pueden aprobar o rechazar, separados por coma
      WL_ROLE           Rol que se da al aprobar (vacio: no se toca ningun rol)
+     APPROVED_MESSAGE  Texto que se publica al aprobar; {user} se cambia por la mencion
 
    En el Developer Portal, "Interactions Endpoint URL" de esa aplicacion debe ser
    https://<este worker>/interactions
+
+   Inicio de sesion con Discord (solo si CLIENT_SECRET y SESSION_SECRET estan puestos):
+     CLIENT_ID         Application ID del bot de whitelist
+     CLIENT_SECRET     Client Secret de esa aplicacion (tipo Secret)
+     SESSION_SECRET    Cualquier texto largo al azar, firma las sesiones (tipo Secret)
+     PAGE_URL          Direccion del formulario, a donde se vuelve tras iniciar sesion
+   En OAuth2 > Redirects de la aplicacion: https://<este worker>/callback
 
    El cooldown se comprueba leyendo las solicitudes que ya hay en el canal, asi
    cuenta tambien las enviadas antes de existir y borrar un mensaje lo levanta. */
@@ -147,7 +155,13 @@ function ephemeral(content) {
 async function announce(env, interaction, approve, userId, text) {
     const problems = [];
     const channel = approve ? env.APPROVED_CHANNEL : env.REJECTED_CHANNEL;
-    if (channel) {
+    if (channel && approve && env.APPROVED_MESSAGE) {
+        const res = await discord(env, '/channels/' + channel + '/messages', { method: 'POST', json: {
+            content: env.APPROVED_MESSAGE.replaceAll('{user}', '<@' + userId + '>'),
+            allowed_mentions: { parse: [], users: [userId] },
+        } });
+        if (!res.ok) problems.push('No se pudo publicar en <#' + channel + '> (error ' + res.status + '). ¿El bot puede escribir ahí?');
+    } else if (channel) {
         const res = await discord(env, '/channels/' + channel + '/messages', { method: 'POST', json: {
             content: '<@' + userId + '>',
             embeds: [{
@@ -196,6 +210,9 @@ async function interactions(request, env, ctx) {
     const userId = m[2];
     const approve = m[1] === 'a' || m[1] === 'ma';
 
+    // Con mensaje fijo, aprobar es un solo clic
+    if (it.type === 3 && approve && env.APPROVED_MESSAGE) return finish(env, ctx, it, true, userId, '');
+
     // Clic en un boton: se abre la ventana para escribir el mensaje
     if (it.type === 3) {
         return Response.json({ type: 9, data: {
@@ -213,23 +230,107 @@ async function interactions(request, env, ctx) {
     // Ventana enviada: se marca la solicitud y se anuncia
     if (it.type === 5) {
         const text = (((it.data.components || [])[0] || {}).components || [])[0]?.value || '';
-        const admin = it.member.user.id;
-        const embed = { ...((it.message.embeds || [])[0] || {}) };
-        embed.color = approve ? 0x6faa42 : 0xe0645f;
-        embed.fields = (embed.fields || []).concat([
-            { name: approve ? '✅ Aprobada' : '❌ Rechazada', value: 'Por <@' + admin + '> · <t:' + Math.floor(Date.now() / 1000) + ':R>' },
-            { name: approve ? 'Mensaje' : 'Motivo', value: cut(text, 1000) },
-        ]).slice(-25);
-
-        ctx.waitUntil(announce(env, it, approve, userId, text).catch(e => console.error('announce', e.message)));
-        return Response.json({ type: 7, data: {
-            embeds: [embed],
-            components: reviewButtons(userId, approve ? 'Aprobada' : 'Rechazada'),
-            allowed_mentions: { parse: [] },
-        } });
+        return finish(env, ctx, it, approve, userId, text);
     }
 
     return ephemeral('Acción desconocida.');
+}
+
+// Marca la solicitud como revisada y anuncia el resultado
+function finish(env, ctx, it, approve, userId, text) {
+    const admin = it.member.user.id;
+    const embed = { ...((it.message.embeds || [])[0] || {}) };
+    embed.color = approve ? 0x6faa42 : 0xe0645f;
+    const added = [{ name: approve ? '✅ Aprobada' : '❌ Rechazada', value: 'Por <@' + admin + '> · <t:' + Math.floor(Date.now() / 1000) + ':R>' }];
+    if (text) added.push({ name: approve ? 'Mensaje' : 'Motivo', value: cut(text, 1000) });
+    embed.fields = (embed.fields || []).concat(added).slice(-25);
+
+    ctx.waitUntil(announce(env, it, approve, userId, text).catch(e => console.error('announce', e.message)));
+    return Response.json({ type: 7, data: {
+        embeds: [embed],
+        components: reviewButtons(userId, approve ? 'Aprobada' : 'Rechazada'),
+        allowed_mentions: { parse: [] },
+    } });
+}
+
+// ------------------------------------------------------------ Inicio de sesion con Discord
+
+function loginEnabled(env) {
+    return !!(env.CLIENT_ID && env.CLIENT_SECRET && env.SESSION_SECRET && env.PAGE_URL);
+}
+
+const b64url = bytes => btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+
+async function hmac(env, text) {
+    const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(env.SESSION_SECRET), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+    return b64url(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(text)));
+}
+
+// La sesion es "datos.firma": la pagina lee los datos, solo el Worker puede firmarlos
+async function makeSession(env, user) {
+    const data = b64url(new TextEncoder().encode(JSON.stringify({
+        id: user.id,
+        username: user.username,
+        name: user.global_name || user.username,
+        avatar: user.avatar ? 'https://cdn.discordapp.com/avatars/' + user.id + '/' + user.avatar + '.png?size=64' : '',
+        email: user.verified ? (user.email || '') : '',
+        exp: Date.now() + 6 * 3600e3,
+    })));
+    return data + '.' + await hmac(env, data);
+}
+
+async function readSession(env, token) {
+    const [data, sig] = String(token || '').split('.');
+    if (!data || !sig || sig !== await hmac(env, data)) return null;
+    try {
+        const s = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(data.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0))));
+        return s.exp > Date.now() && /^\d{17,20}$/.test(s.id) ? s : null;
+    } catch (e) {
+        return null;
+    }
+}
+
+function backToPage(env, hash, extra = {}) {
+    return new Response(null, { status: 302, headers: { Location: env.PAGE_URL + '#' + hash, ...extra } });
+}
+
+async function login(request, env) {
+    const url = new URL(request.url);
+    const redirect = url.origin + '/callback';
+
+    if (url.pathname === '/login') {
+        const state = b64url(crypto.getRandomValues(new Uint8Array(16)));
+        const auth = 'https://discord.com/oauth2/authorize?' + new URLSearchParams({
+            client_id: env.CLIENT_ID, response_type: 'code', scope: 'identify email',
+            redirect_uri: redirect, state,
+        });
+        return new Response(null, { status: 302, headers: {
+            Location: auth,
+            'Set-Cookie': 'wl_state=' + state + '; Path=/; Max-Age=600; HttpOnly; Secure; SameSite=Lax',
+        } });
+    }
+
+    // /callback
+    const clear = { 'Set-Cookie': 'wl_state=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax' };
+    const cookie = (request.headers.get('Cookie') || '').match(/(?:^|;\s*)wl_state=([^;]+)/);
+    const code = url.searchParams.get('code');
+    if (!code) return backToPage(env, 'login_error=cancel', clear);
+    if (!cookie || cookie[1] !== url.searchParams.get('state')) return backToPage(env, 'login_error=state', clear);
+
+    const tok = await fetch(API + '/oauth2/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+            client_id: env.CLIENT_ID, client_secret: env.CLIENT_SECRET,
+            grant_type: 'authorization_code', code, redirect_uri: redirect,
+        }),
+    }).then(r => r.ok ? r.json() : null);
+    if (!tok) return backToPage(env, 'login_error=discord', clear);
+
+    const user = await fetch(API + '/users/@me', { headers: { Authorization: 'Bearer ' + tok.access_token } }).then(r => r.ok ? r.json() : null);
+    if (!user) return backToPage(env, 'login_error=discord', clear);
+
+    return backToPage(env, 'login=' + await makeSession(env, user), clear);
 }
 
 // ------------------------------------------------------------ Entrada
@@ -240,6 +341,10 @@ export default {
         if (url.pathname === '/interactions') {
             if (request.method !== 'POST' || !reviewEnabled(env)) return new Response('Not found', { status: 404 });
             return interactions(request, env, ctx);
+        }
+        if (url.pathname === '/login' || url.pathname === '/callback') {
+            if (request.method !== 'GET' || !loginEnabled(env)) return new Response('Not found', { status: 404 });
+            return login(request, env);
         }
 
         const cors = {
@@ -263,6 +368,22 @@ export default {
             payload = JSON.parse(incoming.get('payload_json'));
         } catch (e) {
             return reply(400, 'Bad request');
+        }
+
+        // Con inicio de sesion, el usuario y el ID salen de Discord, no de lo que se escribio
+        if (loginEnabled(env)) {
+            const s = await readSession(env, incoming.get('auth'));
+            if (!s) return json(401, { error: 'login' });
+            const embed = (payload.embeds || [])[0];
+            if (!embed) return reply(400, 'Bad request');
+            const set = (name, value) => {
+                embed.fields = embed.fields || [];
+                const f = embed.fields.find(x => x && x.name === name);
+                if (f) f.value = value; else embed.fields.unshift({ name, value, inline: true });
+            };
+            set('ID de Discord', '`' + s.id + '`');
+            set('Usuario', '<@' + s.id + '>\n`' + cut(s.username, 40) + '` ✔️');
+            payload.content = String(payload.content || '').replace(/\*\*[^*]*\*\*\s*$/, '**' + cut(s.username, 40).replace(/([*_`~|\\])/g, '\\$1') + '**');
         }
 
         // Si no se puede leer el canal, se deja pasar: mejor una solicitud repetida que una perdida

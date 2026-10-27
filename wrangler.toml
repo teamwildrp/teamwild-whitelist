@@ -13,8 +13,11 @@ APPROVED_CHANNEL = "1561724611530330203"
 REJECTED_CHANNEL = "1564749677184688199"
 APPROVER_ROLES = "1437175053933350912,1470044707160850475,1467583188825280621"
 WL_ROLE = "1560619541141266533"
+APPROVED_MESSAGE = "{user} aprobaste la primera whitelist, cuando quieras puedes crear un ticket de whitelist en <#1467588652778524764> para que puedas solicitar la whitelist en llamada"
+CLIENT_ID = "1564756811288940684"
+PAGE_URL = "https://teamwildrp.github.io/teamwild-whitelist/"
 WL_PUBLIC_KEY = "22a0496c2e7b858fce0629ce2154a746169864087fcdfe44cc9fa9065797a526"
-# WEBHOOK_URL, BOT_TOKEN y WL_BOT_TOKEN van como secretos: npx wrangler secret put WEBHOOK_URL
+# WEBHOOK_URL, BOT_TOKEN, WL_BOT_TOKEN, CLIENT_SECRET y SESSION_SECRET van como secretos: npx wrangler secret put WEBHOOK_URL
 
 [observability]
 enabled = true

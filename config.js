@@ -12,6 +12,9 @@ window.TW_CONFIG = {
     // Deben coincidir con PING_ROLES del Worker, que es quien decide cuales suenan.
     pingRoles: ['1437175053933350912', '1467583188825280621'],
 
+    // Pedir inicio de sesion con Discord antes del formulario (rellena usuario e ID)
+    discordLogin: false,
+
     // Tamaño maximo del archivo con la historia
     maxFileMB: 8,
 };

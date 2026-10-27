@@ -9,7 +9,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap">
-    <link rel="stylesheet" href="style.css?v=2">
+    <link rel="stylesheet" href="style.css?v=3">
 </head>
 <body>
     <main class="shell">
@@ -20,6 +20,14 @@
                 <span>Rellena este formulario si quieres acceder a Team Wild RP</span>
             </div>
         </header>
+
+        <section class="gate hidden" id="login-gate">
+            <div class="gate-icon"><i class="fa-brands fa-discord"></i></div>
+            <h2>Inicia sesión con Discord</h2>
+            <p>Usamos tu cuenta para rellenar tu usuario y tu ID de Discord, y para avisarte del resultado. Solo vemos tu nombre, tu ID y tu email.</p>
+            <a class="btn discord" id="btn-login" href="#"><i class="fa-brands fa-discord"></i> Continuar con Discord</a>
+            <p class="gate-error" id="login-error"></p>
+        </section>
 
         <nav class="steps" id="steps" aria-label="Progreso">
             <div class="step active" data-step="0"><b>1</b><span>Tu personaje</span></div>
@@ -72,7 +80,16 @@
                     </div>
                 </div>
 
-                <div class="grid-2">
+                <div class="card account hidden" id="account">
+                    <img class="acc-avatar" id="acc-avatar" alt="">
+                    <div class="acc-text">
+                        <strong id="acc-name"></strong>
+                        <span id="acc-user"></span>
+                    </div>
+                    <button type="button" class="btn ghost" id="btn-switch"><i class="fa-solid fa-right-left"></i> Cambiar cuenta</button>
+                </div>
+
+                <div class="grid-2" id="discord-fields">
                     <div class="card q" data-name="discord_id">
                         <label class="q-title" for="f-did">ID de Discord <em>*</em></label>
                         <input class="input mono" id="f-did" name="discord_id" type="text" inputmode="numeric" placeholder="123456789012345678">
@@ -161,7 +178,7 @@
         <p class="foot">Team Wild RP · Los campos con <em>*</em> son obligatorios</p>
     </main>
 
-    <script src="config.js?v=2"></script>
-    <script src="app.js?v=3"></script>
+    <script src="config.js?v=3"></script>
+    <script src="app.js?v=4"></script>
 </body>
 </html>
