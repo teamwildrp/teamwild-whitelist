@@ -8,7 +8,7 @@
      ALLOWED_ORIGIN    https://TUUSUARIO.github.io  (sin barra final)
      PING_ROLES        IDs de roles separados por coma: los unicos que pueden sonar
      BOT_TOKEN         Token de un bot que pueda leer el canal del webhook (tipo Secret)
-     COOLDOWN_HOURS    Horas entre solicitudes con el mismo ID de Discord o email (12)
+     COOLDOWN_HOURS    Horas de espera tras un rechazo para volver a enviar (12)
 
    Revision con botones (solo si WL_BOT_TOKEN y WL_PUBLIC_KEY estan puestos):
      WL_BOT_TOKEN      Token del bot de whitelist (tipo Secret). Publica las solicitudes
@@ -20,6 +20,7 @@
      APPROVER_ROLES    Roles que pueden aprobar o rechazar, separados por coma
      WL_ROLE           Rol que se da al aprobar (vacio: no se toca ningun rol)
      APPROVED_MESSAGE  Texto que se publica al aprobar; {user} se cambia por la mencion
+     CITIZEN_ROLE      Rol de quien ya paso la whitelist en llamada (acceso completo)
 
    En el Developer Portal, "Interactions Endpoint URL" de esa aplicacion debe ser
    https://<este worker>/interactions
@@ -31,9 +32,14 @@
      PAGE_URL          Direccion del formulario, a donde se vuelve tras iniciar sesion
    En OAuth2 > Redirects de la aplicacion: https://<este worker>/callback
 
-   El cooldown se comprueba en el KV SUBMITS (cada envio guarda su ID y su email
-   durante COOLDOWN_HOURS, aunque luego se borre el mensaje) y ademas leyendo las
-   solicitudes que ya hay en el canal, que cubre las enviadas antes del KV. */
+   Estado de cada persona (KV SUBMITS), que decide si puede enviar:
+     user:<id>      { status: pending | approved | rejected, at, msg, reason }
+     email:<email>  ID de Discord de quien envio con ese email
+   Sin registro se busca en el canal (solicitudes de antes del KV) y se guarda.
+     - Rol CITIZEN_ROLE      -> acceso completo, no envia
+     - Rol WL_ROLE o aprobada -> aprobada, sigue con el ticket
+     - Pendiente              -> esperando respuesta (si se borra el mensaje, se olvida)
+     - Rechazada              -> espera COOLDOWN_HOURS desde el rechazo */
 
 const MAX_FILES = 2;
 const MAX_BYTES = 9 * 1024 * 1024;
@@ -71,26 +77,44 @@ function discord(env, path, init = {}) {
     return fetch(API + path, { ...init, headers });
 }
 
-const cooldownKeys = (id, email) => [id && 'id:' + id, email && 'email:' + email].filter(Boolean);
+// ------------------------------------------------------------ Estado de cada persona
 
-// Guarda el envio para que el cooldown no dependa de que el mensaje siga en Discord
-async function rememberSubmit(env, id, email) {
-    const hours = Number(env.COOLDOWN_HOURS || 12);
-    if (!env.SUBMITS || !hours) return;
-    const now = new Date().toISOString();
-    await Promise.all(cooldownKeys(id, email).map(k => env.SUBMITS.put(k, now, { expirationTtl: Math.max(60, hours * 3600) })));
+const STATES = ['pending', 'approved', 'rejected'];
+
+async function getRecord(env, id) {
+    if (!env.SUBMITS || !id) return null;
+    try { return JSON.parse(await env.SUBMITS.get('user:' + id)); } catch (e) { return null; }
 }
 
-// Fecha hasta la que dura el cooldown de esta persona, o null si puede enviar
-async function cooldownUntil(env, id, email) {
-    const hours = Number(env.COOLDOWN_HOURS || 12);
-    if (!hours) return null;
+async function setRecord(env, id, rec, email) {
+    if (!env.SUBMITS || !id) return;
+    await env.SUBMITS.put('user:' + id, JSON.stringify(rec));
+    if (email) await env.SUBMITS.put('email:' + email, id);
+}
 
-    if (env.SUBMITS) {
-        const sent = (await Promise.all(cooldownKeys(id, email).map(k => env.SUBMITS.get(k)))).filter(Boolean).sort().pop();
-        if (sent && Date.parse(sent) + hours * 3600e3 > Date.now()) return new Date(Date.parse(sent) + hours * 3600e3).toISOString();
+async function memberRoles(env, id) {
+    if (!env.WL_BOT_TOKEN || !env.GUILD_ID) return [];
+    const res = await discord(env, '/guilds/' + env.GUILD_ID + '/members/' + id);
+    return res.ok ? ((await res.json()).roles || []) : [];
+}
+
+// Lo que dice un mensaje del canal: botones activos, "Aprobada" o "Rechazada"
+function messageRecord(m, hours) {
+    const buttons = (m.components || []).flatMap(r => r.components || []);
+    const done = buttons.find(c => c.disabled && /^(Aprobada|Rechazada)$/.test(c.label || ''));
+    if (done) {
+        const fields = ((m.embeds || [])[0] || {}).fields || [];
+        const reason = (fields.find(f => f.name === 'Motivo') || {}).value || '';
+        return { status: done.label === 'Aprobada' ? 'approved' : 'rejected', at: m.edited_timestamp || m.timestamp, msg: m.id, reason };
     }
+    if (buttons.some(c => /^wl:a:/.test(c.custom_id || '') && !c.disabled)) return { status: 'pending', at: m.timestamp, msg: m.id };
+    // Solicitudes viejas del webhook, sin botones: cuentan como pendientes solo COOLDOWN_HOURS
+    if (Date.parse(m.timestamp) + hours * 3600e3 > Date.now()) return { status: 'pending', at: m.timestamp, msg: m.id, legacy: true };
+    return null;
+}
 
+// Busca la ultima solicitud de esta persona en el canal (para las enviadas antes del KV)
+async function scanChannel(env, id, email, hours) {
     const token = env.WL_BOT_TOKEN || env.BOT_TOKEN;
     if (!token) return null;
     const auth = { headers: { Authorization: 'Bot ' + token } };
@@ -102,25 +126,66 @@ async function cooldownUntil(env, id, email) {
         channelId = wh.channel_id;
     }
 
-    const since = Date.now() - hours * 3600e3;
     let before = '';
     for (let page = 0; page < MAX_PAGES; page++) {
         const res = await fetch(API + '/channels/' + channelId + '/messages?limit=100' + before, auth);
         if (!res.ok) throw new Error('messages ' + res.status);
         const msgs = await res.json();
         for (const m of msgs) {
-            const sent = Date.parse(m.timestamp);
-            if (sent < since) return null;
             if (!(m.webhook_id || (m.author && m.author.bot)) || !(m.embeds || []).length) continue;
             const old = { embeds: m.embeds };
-            if ((id && field(old, 'ID de Discord') === id) || (email && field(old, 'Email') === email)) {
-                return new Date(sent + hours * 3600e3).toISOString();
+            const owner = field(old, 'ID de Discord');
+            if ((id && owner === id) || (email && field(old, 'Email') === email)) {
+                const rec = messageRecord(m, hours);
+                return rec ? { ...rec, owner } : null;
             }
         }
         if (msgs.length < 100) return null;
         before = '&before=' + msgs[msgs.length - 1].id;
     }
     return null;
+}
+
+// Que puede hacer esta persona: none (enviar), pending, approved, citizen o rejected (+ until)
+async function personState(env, id, email) {
+    const hours = Number(env.COOLDOWN_HOURS || 12);
+
+    const roles = await memberRoles(env, id).catch(() => []);
+    if (env.CITIZEN_ROLE && roles.includes(env.CITIZEN_ROLE)) return { state: 'citizen' };
+    if (env.WL_ROLE && roles.includes(env.WL_ROLE)) return { state: 'approved' };
+
+    let owner = id;
+    let rec = await getRecord(env, id);
+    if (!rec && email && env.SUBMITS) {
+        const other = await env.SUBMITS.get('email:' + email);
+        if (other) { owner = other; rec = await getRecord(env, other); }
+    }
+    if (!rec) {
+        rec = await scanChannel(env, id, email, hours);
+        if (rec) {
+            owner = rec.owner || id;
+            delete rec.owner;
+            if (!rec.legacy) await setRecord(env, owner, rec);
+        }
+    }
+    if (!rec || !STATES.includes(rec.status)) return { state: 'none' };
+
+    if (rec.status === 'pending') {
+        if (rec.legacy) return Date.parse(rec.at) + hours * 3600e3 > Date.now() ? { state: 'pending' } : { state: 'none' };
+        // Si el staff borro el mensaje, la solicitud ya no existe
+        if (rec.msg && env.WL_BOT_TOKEN && env.CHANNEL_ID) {
+            const res = await discord(env, '/channels/' + env.CHANNEL_ID + '/messages/' + rec.msg);
+            if (res.status === 404) {
+                await env.SUBMITS.delete('user:' + owner);
+                return { state: 'none' };
+            }
+        }
+        return { state: 'pending' };
+    }
+    if (rec.status === 'approved') return { state: 'approved' };
+
+    const until = Date.parse(rec.at) + hours * 3600e3;
+    return until > Date.now() ? { state: 'rejected', until: new Date(until).toISOString(), reason: rec.reason || '' } : { state: 'none' };
 }
 
 // ------------------------------------------------------------ Revision desde Discord
@@ -264,6 +329,12 @@ function finish(env, ctx, it, approve, userId, text) {
     embed.fields = (embed.fields || []).concat(added).slice(-25);
 
     ctx.waitUntil(announce(env, it, approve, userId, text).catch(e => console.error('announce', e.message)));
+    ctx.waitUntil(setRecord(env, userId, {
+        status: approve ? 'approved' : 'rejected',
+        at: new Date().toISOString(),
+        msg: it.message.id,
+        reason: approve ? '' : cut(text, 1000),
+    }).catch(e => console.error('record', e.message)));
     return Response.json({ type: 7, data: {
         embeds: [embed],
         components: reviewButtons(userId, approve ? 'Aprobada' : 'Rechazada'),
@@ -387,11 +458,10 @@ export default {
             try { s = await readSession(env, (await request.formData()).get('auth')); } catch (e) { }
             if (!s) return json(401, { error: 'login' });
             try {
-                const until = await cooldownUntil(env, s.id, String(s.email || '').toLowerCase());
-                return json(200, until ? { until } : {});
+                return json(200, await personState(env, s.id, String(s.email || '').toLowerCase()));
             } catch (e) {
                 console.error('status', e.message);
-                return json(200, {});
+                return json(200, { state: 'none' });
             }
         }
 
@@ -419,12 +489,12 @@ export default {
             payload.content = String(payload.content || '').replace(/\*\*[^*]*\*\*\s*$/, '**' + cut(s.username, 40).replace(/([*_`~|\\])/g, '\\$1') + '**');
         }
 
-        // Si no se puede leer el canal, se deja pasar: mejor una solicitud repetida que una perdida
+        // Si no se puede comprobar, se deja pasar: mejor una solicitud repetida que una perdida
         try {
-            const until = await cooldownUntil(env, field(payload, 'ID de Discord'), field(payload, 'Email'));
-            if (until) return json(409, { error: 'cooldown', until });
+            const st = await personState(env, field(payload, 'ID de Discord'), field(payload, 'Email'));
+            if (st.state !== 'none') return json(409, { error: 'cooldown', ...st });
         } catch (e) {
-            console.error('cooldown', e.message);
+            console.error('state', e.message);
         }
 
         // Nada de lo que llegue desde fuera decide a quien se menciona
@@ -450,7 +520,7 @@ export default {
 
         let res = withButtons
             ? await discord(env, '/channels/' + env.CHANNEL_ID + '/messages', { method: 'POST', body: out })
-            : await fetch(env.WEBHOOK_URL, { method: 'POST', body: out });
+            : await fetch(env.WEBHOOK_URL + '?wait=true', { method: 'POST', body: out });
 
         // Si el bot de whitelist falla, la solicitud igual llega por el webhook (sin botones)
         if (!res.ok && withButtons) {
@@ -462,9 +532,13 @@ export default {
                 const f = incoming.get('files[' + i + ']');
                 if (f && typeof f !== 'string') retry.append('files[' + i + ']', f, f.name);
             }
-            res = await fetch(env.WEBHOOK_URL, { method: 'POST', body: retry });
+            res = await fetch(env.WEBHOOK_URL + '?wait=true', { method: 'POST', body: retry });
         }
-        if (res.ok) ctx.waitUntil(rememberSubmit(env, userId, field(payload, 'Email')).catch(e => console.error('remember', e.message)));
+        if (res.ok) {
+            const sent = await res.json().catch(() => ({}));
+            ctx.waitUntil(setRecord(env, userId, { status: 'pending', at: new Date().toISOString(), msg: sent.id || '' }, field(payload, 'Email'))
+                .catch(e => console.error('record', e.message)));
+        }
         return reply(res.ok ? 204 : res.status);
     },
 };

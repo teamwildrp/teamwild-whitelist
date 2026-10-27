@@ -9,7 +9,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap">
-    <link rel="stylesheet" href="style.css?v=4">
+    <link rel="stylesheet" href="style.css?v=5">
 </head>
 <body>
     <main class="shell">
@@ -29,15 +29,25 @@
             <p class="gate-error" id="login-error"></p>
         </section>
 
+        <!-- Estado de la solicitud: pendiente, rechazada, aprobada o acceso completo -->
         <section class="gate hidden" id="cooldown">
-            <div class="gate-icon wait"><i class="fa-solid fa-hourglass-half"></i></div>
-            <h2>Ya recibimos tu solicitud</h2>
-            <p>Hay una solicitud reciente con tu cuenta de Discord o tu email. El staff la revisará y te avisará por Discord.</p>
-            <div class="cd-when">
+            <div class="gate-icon" id="cd-icon"><i class="fa-solid fa-hourglass-half"></i></div>
+            <h2 id="cd-title"></h2>
+            <p id="cd-text"></p>
+            <div class="cd-reason hidden" id="cd-reason">
+                <span>Motivo del rechazo</span>
+                <p id="cd-reason-text"></p>
+            </div>
+            <div class="cd-when hidden" id="cd-when">
                 <span>Podrás enviar otra a partir del</span>
                 <strong id="cd-date"></strong>
                 <em id="cd-left"></em>
             </div>
+            <ol class="cd-steps hidden" id="cd-steps">
+                <li>Entra a <a id="cd-ticket" target="_blank" rel="noopener">#🎫-crear-ticket</a> en nuestro Discord y crea un ticket.</li>
+                <li>Elige la opción <b>Whitelist</b>.</li>
+                <li>Espera a que el staff te llame para hacer la <b>whitelist en llamada</b>.</li>
+            </ol>
             <button type="button" class="btn ghost" id="cd-switch"><i class="fa-solid fa-right-left"></i> Usar otra cuenta</button>
         </section>
 
@@ -190,7 +200,7 @@
         <p class="foot">Team Wild RP · Los campos con <em>*</em> son obligatorios</p>
     </main>
 
-    <script src="config.js?v=4"></script>
-    <script src="app.js?v=5"></script>
+    <script src="config.js?v=5"></script>
+    <script src="app.js?v=6"></script>
 </body>
 </html>

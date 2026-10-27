@@ -263,15 +263,45 @@
         form.classList.remove('hidden');
     }
 
-    // Pantalla de espera: se ve en vez del formulario mientras dura el cooldown
+    // Pantalla de estado: se ve en vez del formulario si la persona no puede enviar
+    var SCREENS = {
+        pending: { icon: 'wait', fa: 'fa-hourglass-half', title: 'Ya enviaste una solicitud',
+            text: 'Tu solicitud de whitelist está a la espera de respuesta. El staff la revisará y te avisará por Discord.' },
+        rejected: { icon: 'bad', fa: 'fa-xmark', title: 'Se rechazó tu solicitud de whitelist',
+            text: 'Revisa el motivo y vuelve a intentarlo cuando termine la espera.' },
+        approved: { icon: 'good', fa: 'fa-check', title: 'Tu solicitud fue aprobada',
+            text: 'Pasaste la primera parte de la whitelist. Estos son los siguientes pasos:' },
+        citizen: { icon: 'good', fa: 'fa-id-card', title: 'Tu whitelist fue aprobada en su totalidad',
+            text: 'Ya tienes acceso al servidor. ¡Nos vemos en la ciudad!' },
+    };
+
     var cooldownTimer = null;
-    function showCooldown(untilIso) {
-        var until = new Date(untilIso);
-        if (isNaN(until)) return showForm();
+    function showState(data) {
+        var sc = SCREENS[data.state];
+        if (!sc) return showForm();
         document.getElementById('login-gate').classList.add('hidden');
         document.getElementById('steps').classList.add('hidden');
         form.classList.add('hidden');
         document.getElementById('cooldown').classList.remove('hidden');
+        document.getElementById('cd-icon').className = 'gate-icon ' + sc.icon;
+        document.getElementById('cd-icon').innerHTML = '<i class="fa-solid ' + sc.fa + '"></i>';
+        document.getElementById('cd-title').textContent = sc.title;
+        document.getElementById('cd-text').textContent = sc.text;
+
+        document.getElementById('cd-reason').classList.toggle('hidden', !(data.state === 'rejected' && data.reason));
+        document.getElementById('cd-reason-text').textContent = data.reason || '';
+        document.getElementById('cd-steps').classList.toggle('hidden', data.state !== 'approved');
+        if (CFG.ticketUrl) document.getElementById('cd-ticket').href = CFG.ticketUrl;
+
+        clearInterval(cooldownTimer);
+        var until = new Date(data.until);
+        var timed = data.state === 'rejected' && !isNaN(until);
+        document.getElementById('cd-when').classList.toggle('hidden', !timed);
+        if (timed) startCountdown(until);
+        window.scrollTo({ top: 0 });
+    }
+
+    function startCountdown(until) {
         document.getElementById('cd-date').textContent = until.toLocaleString('es-ES', {
             weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit',
         }).replace(',', '').replace(/,? (\d{1,2}:\d{2})$/, ' a las $1');
@@ -281,10 +311,8 @@
             var h = Math.floor(mins / 60), m = mins % 60;
             document.getElementById('cd-left').textContent = 'Faltan ' + (h ? h + ' h ' : '') + m + ' min';
         }
-        clearInterval(cooldownTimer);
         tick();
         cooldownTimer = setInterval(tick, 30000);
-        window.scrollTo({ top: 0 });
     }
 
     // Antes de mostrar el formulario se pregunta si la persona puede enviar
@@ -296,7 +324,7 @@
         fetch(CFG.endpoint.replace(/\/$/, '') + '/status', { method: 'POST', body: fd })
             .then(function (res) {
                 if (res.status === 401) { saveSession(''); session = null; showGate(LOGIN_ERRORS.expired); return; }
-                return res.json().then(function (data) { if (data.until) showCooldown(data.until); else showForm(); });
+                return res.json().then(showState);
             })
             .catch(function () { showForm(); }); // si no se puede consultar, el envio lo vuelve a comprobar
     }
@@ -483,7 +511,7 @@
                     return;
                 }
                 if (res.status === 409) return res.json().catch(function () { return {}; }).then(function (data) {
-                    if (data.until && session) { clearDraft(); showCooldown(data.until); return; }
+                    if (data.state && session) { clearDraft(); showState(data); return; }
                     var until = data.until ? new Date(data.until) : null;
                     throw new Error('Ya hay una solicitud enviada con este ID de Discord o email. ' + (until
                         ? 'Podrás enviar otra a partir del ' + until.toLocaleString('es-ES', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }) + '.'
