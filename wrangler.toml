@@ -6,4 +6,5 @@ workers_dev = true
 [vars]
 ALLOWED_ORIGIN = "https://teamwildrp.github.io"
 PING_ROLES = "1437175053933350912,1467583188825280621"
-# WEBHOOK_URL va como secreto: npx wrangler secret put WEBHOOK_URL
+COOLDOWN_HOURS = "12"
+# WEBHOOK_URL y BOT_TOKEN van como secretos: npx wrangler secret put WEBHOOK_URL

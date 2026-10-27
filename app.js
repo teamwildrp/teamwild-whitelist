@@ -363,6 +363,12 @@
         fetch(CFG.endpoint, { method: 'POST', body: fd })
             .then(function (res) {
                 if (res.ok) { clearDraft(); go(3); document.getElementById('nav').classList.add('hidden'); return; }
+                if (res.status === 409) return res.json().catch(function () { return {}; }).then(function (data) {
+                    var until = data.until ? new Date(data.until) : null;
+                    throw new Error('Ya hay una solicitud enviada con este ID de Discord o email. ' + (until
+                        ? 'Podrás enviar otra a partir del ' + until.toLocaleString('es-ES', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }) + '.'
+                        : 'Espera unas horas para enviar otra.'));
+                });
                 if (res.status === 429) throw new Error('Hay muchas solicitudes ahora mismo. Espera un minuto y vuelve a intentarlo.');
                 if (res.status === 413) throw new Error('El archivo es demasiado grande para Discord. Prueba con uno más pequeño.');
                 throw new Error('No se pudo enviar (error ' + res.status + '). Inténtalo de nuevo.');
