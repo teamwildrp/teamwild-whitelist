@@ -265,14 +265,14 @@
 
     // Pantalla de estado: se ve en vez del formulario si la persona no puede enviar
     var SCREENS = {
-        pending: { icon: 'wait', fa: 'fa-hourglass-half', title: 'Ya enviaste una solicitud',
-            text: 'Tu solicitud de whitelist está a la espera de respuesta. El staff la revisará y te avisará por Discord.' },
-        rejected: { icon: 'bad', fa: 'fa-xmark', title: 'Se rechazó tu solicitud de whitelist',
-            text: 'Revisa el motivo y vuelve a intentarlo cuando termine la espera.' },
-        approved: { icon: 'good', fa: 'fa-check', title: 'Tu solicitud fue aprobada',
-            text: 'Pasaste la primera parte de la whitelist. Estos son los siguientes pasos:' },
-        citizen: { icon: 'good', fa: 'fa-id-card', title: 'Tu whitelist fue aprobada en su totalidad',
-            text: 'Ya tienes acceso al servidor. ¡Nos vemos en la ciudad!' },
+        pending: { icon: 'wait', fa: 'fa-hourglass-half', title: 'Solicitud en revisión',
+            text: 'Recibimos tu solicitud de whitelist. El equipo de staff la está revisando y te notificaremos el resultado por Discord.' },
+        rejected: { icon: 'bad', fa: 'fa-xmark', title: 'Solicitud rechazada',
+            text: 'Tu solicitud de whitelist no fue aprobada. Podrás enviar una nueva cuando finalice el período de espera.' },
+        approved: { icon: 'good', fa: 'fa-check', title: 'Solicitud aprobada',
+            text: 'Superaste la primera etapa del proceso de whitelist. Para continuar:' },
+        citizen: { icon: 'good', fa: 'fa-id-card', title: 'Whitelist completada',
+            text: 'Completaste el proceso de whitelist y ya tienes acceso al servidor. Te damos la bienvenida a Team Wild RP.' },
     };
 
     var cooldownTimer = null;
