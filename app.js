@@ -265,13 +265,15 @@
 
     // Pantalla de estado: se ve en vez del formulario si la persona no puede enviar
     var SCREENS = {
-        pending: { icon: 'wait', fa: 'fa-hourglass-half', title: 'Solicitud en revisión',
+        notmember: { icon: 'discord', fa: 'fa-brands fa-discord', title: 'Únete a nuestro Discord',
+            text: 'Para enviar una solicitud de whitelist debes ser miembro de nuestro servidor de Discord. Únete y vuelve a esta página para continuar.' },
+        pending: { icon: 'wait', fa: 'fa-solid fa-hourglass-half', title: 'Solicitud en revisión',
             text: 'Recibimos tu solicitud de whitelist. El equipo de staff la está revisando y te notificaremos el resultado por Discord.' },
-        rejected: { icon: 'bad', fa: 'fa-xmark', title: 'Solicitud rechazada',
+        rejected: { icon: 'bad', fa: 'fa-solid fa-xmark', title: 'Solicitud rechazada',
             text: 'Tu solicitud de whitelist no fue aprobada. Podrás enviar una nueva cuando finalice el período de espera.' },
-        approved: { icon: 'good', fa: 'fa-check', title: 'Solicitud aprobada',
+        approved: { icon: 'good', fa: 'fa-solid fa-check', title: 'Solicitud aprobada',
             text: 'Superaste la primera etapa del proceso de whitelist. Para continuar:' },
-        citizen: { icon: 'good', fa: 'fa-id-card', title: 'Whitelist completada',
+        citizen: { icon: 'good', fa: 'fa-solid fa-id-card', title: 'Whitelist completada',
             text: 'Completaste el proceso de whitelist y ya tienes acceso al servidor. Te damos la bienvenida a Team Wild RP.' },
     };
 
@@ -284,13 +286,15 @@
         form.classList.add('hidden');
         document.getElementById('cooldown').classList.remove('hidden');
         document.getElementById('cd-icon').className = 'gate-icon ' + sc.icon;
-        document.getElementById('cd-icon').innerHTML = '<i class="fa-solid ' + sc.fa + '"></i>';
+        document.getElementById('cd-icon').innerHTML = '<i class="' + sc.fa + '"></i>';
         document.getElementById('cd-title').textContent = sc.title;
         document.getElementById('cd-text').textContent = sc.text;
 
         document.getElementById('cd-reason').classList.toggle('hidden', !(data.state === 'rejected' && data.reason));
         document.getElementById('cd-reason-text').textContent = data.reason || '';
         document.getElementById('cd-steps').classList.toggle('hidden', data.state !== 'approved');
+        document.getElementById('cd-join').classList.toggle('hidden', data.state !== 'notmember');
+        if (CFG.inviteUrl) document.getElementById('cd-invite').href = CFG.inviteUrl;
         if (CFG.ticketUrl) document.getElementById('cd-ticket').href = CFG.ticketUrl;
 
         clearInterval(cooldownTimer);
@@ -364,6 +368,10 @@
     document.getElementById('btn-login').addEventListener('click', function (e) { e.preventDefault(); startLogin(); });
     document.getElementById('btn-switch').addEventListener('click', function () { saveSession(''); startLogin(); });
     document.getElementById('cd-switch').addEventListener('click', function () { saveSession(''); startLogin(); });
+    document.getElementById('cd-recheck').addEventListener('click', function () {
+        document.getElementById('cooldown').classList.add('hidden');
+        checkStatus();
+    });
 
     // ------------------------------------------------------------ Navegacion
 

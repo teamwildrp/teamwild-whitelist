@@ -15,6 +15,9 @@ window.TW_CONFIG = {
     // Pedir inicio de sesion con Discord antes del formulario (rellena usuario e ID)
     discordLogin: true,
 
+    // Invitacion al Discord, para quien inicia sesion sin ser miembro
+    inviteUrl: 'https://discord.gg/4TQk5Fy7fF',
+
     // Canal de tickets, para los pasos que siguen tras aprobar la whitelist
     ticketUrl: 'https://discord.com/channels/1437159254900343060/1467588652778524764',
 

@@ -255,6 +255,9 @@ input[type=number].input::-webkit-inner-spin-button { opacity: .4; }
 }
 .cd-reason span { font-size: 11.5px; color: var(--accent-red); font-weight: 500; text-transform: uppercase; letter-spacing: .3px; }
 .gate .cd-reason p { margin: 4px 0 0; max-width: none; color: var(--text-main); white-space: pre-wrap; }
+.gate-icon.discord { background: rgba(88, 101, 242, .14); border-color: #5865f2; color: #8b95ff; }
+.cd-join { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin: 0 auto 14px; }
+.cd-join + .btn { font-size: 12.5px; padding: 8px 14px; }
 .cd-steps {
     max-width: 440px; margin: 0 auto 20px; padding: 14px 16px 14px 36px; text-align: left;
     background: var(--bg-input); border: 1px solid var(--border-color); border-radius: var(--radius);

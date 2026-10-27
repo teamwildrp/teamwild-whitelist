@@ -36,6 +36,7 @@
      user:<id>      { status: pending | approved | rejected, at, msg, reason }
      email:<email>  ID de Discord de quien envio con ese email
    Sin registro se busca en el canal (solicitudes de antes del KV) y se guarda.
+     - No esta en el servidor -> tiene que unirse antes de enviar
      - Rol CITIZEN_ROLE      -> acceso completo, no envia
      - Rol WL_ROLE o aprobada -> aprobada, sigue con el ticket
      - Pendiente              -> esperando respuesta (si se borra el mensaje, se olvida)
@@ -92,9 +93,11 @@ async function setRecord(env, id, rec, email) {
     if (email) await env.SUBMITS.put('email:' + email, id);
 }
 
+// Roles en el servidor, o null si la persona no es miembro
 async function memberRoles(env, id) {
     if (!env.WL_BOT_TOKEN || !env.GUILD_ID) return [];
     const res = await discord(env, '/guilds/' + env.GUILD_ID + '/members/' + id);
+    if (res.status === 404) return null;
     return res.ok ? ((await res.json()).roles || []) : [];
 }
 
@@ -151,6 +154,7 @@ async function personState(env, id, email) {
     const hours = Number(env.COOLDOWN_HOURS || 12);
 
     const roles = await memberRoles(env, id).catch(() => []);
+    if (roles === null) return { state: 'notmember' };
     if (env.CITIZEN_ROLE && roles.includes(env.CITIZEN_ROLE)) return { state: 'citizen' };
     if (env.WL_ROLE && roles.includes(env.WL_ROLE)) return { state: 'approved' };
 
