@@ -13,7 +13,7 @@ window.TW_CONFIG = {
     pingRoles: ['1437175053933350912', '1467583188825280621'],
 
     // Pedir inicio de sesion con Discord antes del formulario (rellena usuario e ID)
-    discordLogin: false,
+    discordLogin: true,
 
     // Tamaño maximo del archivo con la historia
     maxFileMB: 8,
