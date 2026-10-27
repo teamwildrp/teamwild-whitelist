@@ -9,7 +9,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap">
-    <link rel="stylesheet" href="style.css?v=3">
+    <link rel="stylesheet" href="style.css?v=4">
 </head>
 <body>
     <main class="shell">
@@ -27,6 +27,18 @@
             <p>Usamos tu cuenta para rellenar tu usuario y tu ID de Discord, y para avisarte del resultado. Solo vemos tu nombre, tu ID y tu email.</p>
             <a class="btn discord" id="btn-login" href="#"><i class="fa-brands fa-discord"></i> Continuar con Discord</a>
             <p class="gate-error" id="login-error"></p>
+        </section>
+
+        <section class="gate hidden" id="cooldown">
+            <div class="gate-icon wait"><i class="fa-solid fa-hourglass-half"></i></div>
+            <h2>Ya recibimos tu solicitud</h2>
+            <p>Hay una solicitud reciente con tu cuenta de Discord o tu email. El staff la revisará y te avisará por Discord.</p>
+            <div class="cd-when">
+                <span>Podrás enviar otra a partir del</span>
+                <strong id="cd-date"></strong>
+                <em id="cd-left"></em>
+            </div>
+            <button type="button" class="btn ghost" id="cd-switch"><i class="fa-solid fa-right-left"></i> Usar otra cuenta</button>
         </section>
 
         <nav class="steps" id="steps" aria-label="Progreso">
@@ -179,6 +191,6 @@
     </main>
 
     <script src="config.js?v=4"></script>
-    <script src="app.js?v=4"></script>
+    <script src="app.js?v=5"></script>
 </body>
 </html>

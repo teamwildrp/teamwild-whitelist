@@ -380,6 +380,21 @@ export default {
         if (env.ALLOWED_ORIGIN && origin !== env.ALLOWED_ORIGIN) return reply(403, 'Forbidden');
         if (Number(request.headers.get('Content-Length') || 0) > MAX_BYTES) return reply(413, 'Too large');
 
+        // La pagina pregunta al iniciar sesion si la persona puede enviar, antes de rellenar nada
+        if (url.pathname === '/status') {
+            if (!loginEnabled(env)) return json(200, {});
+            let s = null;
+            try { s = await readSession(env, (await request.formData()).get('auth')); } catch (e) { }
+            if (!s) return json(401, { error: 'login' });
+            try {
+                const until = await cooldownUntil(env, s.id, String(s.email || '').toLowerCase());
+                return json(200, until ? { until } : {});
+            } catch (e) {
+                console.error('status', e.message);
+                return json(200, {});
+            }
+        }
+
         let incoming, payload;
         try {
             incoming = await request.formData();

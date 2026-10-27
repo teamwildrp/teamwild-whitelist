@@ -249,16 +249,59 @@
     }
 
     function showGate(error) {
+        document.getElementById('cooldown').classList.add('hidden');
         document.getElementById('login-gate').classList.remove('hidden');
         document.getElementById('steps').classList.add('hidden');
         form.classList.add('hidden');
         document.getElementById('login-error').textContent = error || '';
     }
 
-    function applySession() {
+    function showForm() {
         document.getElementById('login-gate').classList.add('hidden');
+        document.getElementById('cooldown').classList.add('hidden');
         document.getElementById('steps').classList.remove('hidden');
         form.classList.remove('hidden');
+    }
+
+    // Pantalla de espera: se ve en vez del formulario mientras dura el cooldown
+    var cooldownTimer = null;
+    function showCooldown(untilIso) {
+        var until = new Date(untilIso);
+        if (isNaN(until)) return showForm();
+        document.getElementById('login-gate').classList.add('hidden');
+        document.getElementById('steps').classList.add('hidden');
+        form.classList.add('hidden');
+        document.getElementById('cooldown').classList.remove('hidden');
+        document.getElementById('cd-date').textContent = until.toLocaleString('es-ES', {
+            weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit',
+        }).replace(',', '').replace(/,? (\d{1,2}:\d{2})$/, ' a las $1');
+        function tick() {
+            var mins = Math.ceil((until - Date.now()) / 60000);
+            if (mins <= 0) { clearInterval(cooldownTimer); location.reload(); return; }
+            var h = Math.floor(mins / 60), m = mins % 60;
+            document.getElementById('cd-left').textContent = 'Faltan ' + (h ? h + ' h ' : '') + m + ' min';
+        }
+        clearInterval(cooldownTimer);
+        tick();
+        cooldownTimer = setInterval(tick, 30000);
+        window.scrollTo({ top: 0 });
+    }
+
+    // Antes de mostrar el formulario se pregunta si la persona puede enviar
+    function checkStatus() {
+        document.getElementById('steps').classList.add('hidden');
+        form.classList.add('hidden');
+        var fd = new FormData();
+        fd.append('auth', sessionToken);
+        fetch(CFG.endpoint.replace(/\/$/, '') + '/status', { method: 'POST', body: fd })
+            .then(function (res) {
+                if (res.status === 401) { saveSession(''); session = null; showGate(LOGIN_ERRORS.expired); return; }
+                return res.json().then(function (data) { if (data.until) showCooldown(data.until); else showForm(); });
+            })
+            .catch(function () { showForm(); }); // si no se puede consultar, el envio lo vuelve a comprobar
+    }
+
+    function applySession() {
         form.elements.discord_id.value = session.id;
         form.elements.discord_user.value = session.username;
         if (session.email && !val('email')) form.elements.email.value = session.email;
@@ -286,12 +329,13 @@
 
         try { sessionToken = localStorage.getItem(SESSION_KEY) || ''; } catch (e) { sessionToken = ''; }
         session = sessionToken ? decodeSession(sessionToken) : null;
-        if (session) applySession();
+        if (session) { applySession(); checkStatus(); }
         else { saveSession(''); showGate(error || (sessionToken ? LOGIN_ERRORS.expired : '')); }
     }
 
     document.getElementById('btn-login').addEventListener('click', function (e) { e.preventDefault(); startLogin(); });
     document.getElementById('btn-switch').addEventListener('click', function () { saveSession(''); startLogin(); });
+    document.getElementById('cd-switch').addEventListener('click', function () { saveSession(''); startLogin(); });
 
     // ------------------------------------------------------------ Navegacion
 
@@ -439,6 +483,7 @@
                     return;
                 }
                 if (res.status === 409) return res.json().catch(function () { return {}; }).then(function (data) {
+                    if (data.until && session) { clearDraft(); showCooldown(data.until); return; }
                     var until = data.until ? new Date(data.until) : null;
                     throw new Error('Ya hay una solicitud enviada con este ID de Discord o email. ' + (until
                         ? 'Podrás enviar otra a partir del ' + until.toLocaleString('es-ES', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }) + '.'
