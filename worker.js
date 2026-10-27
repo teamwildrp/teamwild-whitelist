@@ -172,15 +172,18 @@ async function personState(env, id, email) {
 
     if (rec.status === 'pending') {
         if (rec.legacy) return Date.parse(rec.at) + hours * 3600e3 > Date.now() ? { state: 'pending' } : { state: 'none' };
-        // Si el staff borro el mensaje, la solicitud ya no existe
+        // El mensaje manda: si se borro, la solicitud ya no existe; si ya se reviso,
+        // vale eso aunque el KV (que tarda hasta un minuto) todavia diga pendiente
         if (rec.msg && env.WL_BOT_TOKEN && env.CHANNEL_ID) {
             const res = await discord(env, '/channels/' + env.CHANNEL_ID + '/messages/' + rec.msg);
             if (res.status === 404) {
                 await env.SUBMITS.delete('user:' + owner);
                 return { state: 'none' };
             }
+            const live = res.ok ? messageRecord(await res.json(), hours) : null;
+            if (live && live.status !== 'pending') rec = live;
         }
-        return { state: 'pending' };
+        if (rec.status === 'pending') return { state: 'pending' };
     }
     if (rec.status === 'approved') return { state: 'approved' };
 
