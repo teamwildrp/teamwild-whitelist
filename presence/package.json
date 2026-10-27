@@ -1,0 +1,10 @@
+{
+  "name": "tw-whitelist-presence",
+  "version": "1.0.0",
+  "description": "Mantiene en linea el bot de whitelist de Team Wild RP",
+  "main": "bot.js",
+  "scripts": { "start": "node bot.js" },
+  "engines": { "node": ">=22" },
+  "license": "UNLICENSED",
+  "private": true
+}

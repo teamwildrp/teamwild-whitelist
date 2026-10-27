@@ -12,3 +12,4 @@ sea pública.
   si el mismo ID de Discord o email ya llegó en las últimas `COOLDOWN_HOURS` horas.
   Borrar el mensaje en Discord levanta el cooldown de esa persona.
 - Respuestas correctas del cuestionario: campo `ok` de cada pregunta en `app.js`.
+- `presence/`: programa para el VPS que mantiene en línea el bot de whitelist (ver `presence/LEEME.md`).
